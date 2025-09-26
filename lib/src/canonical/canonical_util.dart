@@ -33,7 +33,7 @@ CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
   options ??= const CanonicalizationOptions();
 
   // Step 1: Create canonicalization state
-  final state = _createCanonicalizationState(dataset, inputLabels);
+  final state = _createCanonicalizationState(dataset, inputLabels, options);
 
   // Step 2: For every blank node identifier, compute first-degree hash
 
@@ -134,10 +134,10 @@ CanonicalizedRdfDataset toCanonicalizedRdfDatasetFromNQuads(String nquads,
 
 String toNQuads(CanonicalizedRdfDataset canonicalized,
     {CanonicalizationOptions? options}) {
-  NQuadsEncoder encoder = NQuadsEncoder();
+  final NQuadsEncoder encoder =
+      NQuadsEncoder(options: NQuadsEncoderOptions(canonical: true));
   return encoder.encode(canonicalized.inputDataset,
       blankNodeLabels: canonicalized.issuedIdentifiers,
-      canonical: true,
       generateNewBlankNodeLabels: false);
 }
 
@@ -173,8 +173,8 @@ bool isIsomorphicGraphs(RdfGraph a, RdfGraph b,
 
 /// Helper function to create canonicalization state from dataset
 CanonicalizationState _createCanonicalizationState(
-    RdfDataset dataset, Map<BlankNodeTerm, String>? inputLabels) {
-  final state = CanonicalizationState();
+    RdfDataset dataset, Map<BlankNodeTerm, String>? inputLabels, CanonicalizationOptions options) {
+  final state = CanonicalizationState(options: options);
 
   // Generate identifiers for blank nodes if not provided
   final blankNodeIdentifiers = <BlankNodeTerm, String>{};

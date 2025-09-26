@@ -2,489 +2,363 @@
   <img src="https://kkalass.github.io/rdf_canonicalization/logo.svg" alt="rdf_canonicalization logo" width="96" height="96"/>
 </div>
 
-# RDF Core
+# RDF Canonicalization
 
 [![pub package](https://img.shields.io/pub/v/rdf_canonicalization.svg)](https://pub.dev/packages/rdf_canonicalization)
 [![build](https://github.com/kkalass/rdf_canonicalization/actions/workflows/ci.yml/badge.svg)](https://github.com/kkalass/rdf_canonicalization/actions)
 [![codecov](https://codecov.io/gh/kkalass/rdf_canonicalization/branch/main/graph/badge.svg)](https://codecov.io/gh/kkalass/rdf_canonicalization)
 [![license](https://img.shields.io/github/license/kkalass/rdf_canonicalization.svg)](https://github.com/kkalass/rdf_canonicalization/blob/main/LICENSE)
 
-A type-safe and extensible Dart library for representing and manipulating RDF data without additional dependencies (except for logging).
+A Dart library for RDF graph canonicalization and isomorphism testing, implementing the standard canonicalization algorithm for deterministic RDF serialization and semantic equality comparison.
 
-## Core of a whole family of projects
+## Part of the RDF ecosystem
 
-If you are looking for more rdf-related functionality, have a look at our companion projects:
+This library provides canonicalization capabilities for RDF data. For creating and manipulating RDF graphs, use our core library:
 
-- Encode and decode RDF/XML format: [rdf_xml](https://github.com/kkalass/rdf_xml)
-- Easy-to-use constants for many well-known vocabularies: [rdf_vocabularies](https://github.com/kkalass/rdf_vocabularies)
-- Generate your own easy-to-use constants for other vocabularies with a build_runner: [rdf_vocabulary_to_dart](https://github.com/kkalass/rdf_vocabulary_to_dart)
+- Core RDF functionality: [rdf_core](https://github.com/kkalass/rdf_core) - Create, parse, and serialize RDF data
+- Easy-to-use constants for vocabularies: [rdf_vocabularies](https://github.com/kkalass/rdf_vocabularies)
 - Map Dart Objects ↔️ RDF: [rdf_mapper](https://github.com/kkalass/rdf_mapper)
 
-**Further Resources:** [🚀 **Getting Started Guide**](doc/GETTING_STARTED.md) | [📚 **Cookbook with Recipes**](doc/COOKBOOK.md) | [🛠️ **Design Philosophy**](doc/DESIGN_PHILOSOPHY.md) | [🌐 **Official Homepage**](https://kkalass.github.io/rdf_canonicalization/)
+**Further Resources:** [🌐 **Official Homepage**](https://kkalass.github.io/rdf_canonicalization/) | [📖 **Example Code**](example/main.dart)
 
 ## Installation
 
-```dart
+```bash
 dart pub add rdf_canonicalization
+dart pub add rdf_core  # For creating RDF graphs
 ```
 
 ## 🚀 Quick Start
 
 ```dart
 import 'package:rdf_canonicalization/rdf_canonicalization.dart';
+import 'package:rdf_core/rdf_core.dart';
 
 void main() {
-  // Parse Turtle data
-  final turtleString = '''
-    @prefix foaf: <http://xmlns.com/foaf/0.1/> .
-    <http://example.org/john> foaf:name "John Doe" ; foaf:age 30 .
+  // Two N-Quads documents with identical semantic content but different blank node labels
+  final nquads1 = '''
+    _:alice <http://xmlns.com/foaf/0.1/name> "Alice" .
+    _:alice <http://xmlns.com/foaf/0.1/knows> _:bob .
+    _:bob <http://xmlns.com/foaf/0.1/name> "Bob" .
   ''';
-  
-  // Decode turtle data to an RDF graph
-  final graph = turtle.decode(turtleString);
-  
-  // Find triples with specific subject and predicate
-  final nameTriples = graph.findTriples(
-    subject: const IriTerm('http://example.org/john'),
-    predicate: const IriTerm('http://xmlns.com/foaf/0.1/name')
-  );
-  
-  if (nameTriples.isNotEmpty) {
-    final name = (nameTriples.first.object as LiteralTerm).value;
-    print('Name: $name');
-  }
-  
-  // Create and add a new triple
-  final subject = const IriTerm('http://example.org/john');
-  final predicate = const IriTerm('http://xmlns.com/foaf/0.1/email');
-  final object = LiteralTerm.string('john@example.org');
-  final triple = Triple(subject, predicate, object);
-  final updatedGraph = graph.withTriple(triple);
-  
-  // Encode the graph as Turtle
-  print(turtle.encode(updatedGraph));
+
+  final nquads2 = '''
+    _:person1 <http://xmlns.com/foaf/0.1/name> "Alice" .
+    _:person1 <http://xmlns.com/foaf/0.1/knows> _:person2 .
+    _:person2 <http://xmlns.com/foaf/0.1/name> "Bob" .
+  ''';
+
+  // Parse both documents
+  final dataset1 = nquads.decode(nquads1);
+  final dataset2 = nquads.decode(nquads2);
+
+  // They are different as strings and objects
+  print('N-Quads strings are identical: ${nquads1.trim() == nquads2.trim()}'); // false
+  print('Dataset objects are identical: ${dataset1 == dataset2}'); // false
+
+  // But they are semantically equivalent (isomorphic)
+  print('Datasets are isomorphic: ${isIsomorphic(dataset1, dataset2)}'); // true
+
+  // Canonicalization produces identical output
+  final canonical1 = canonicalize(dataset1);
+  final canonical2 = canonicalize(dataset2);
+  print('Canonical forms are identical: ${canonical1 == canonical2}'); // true
+
+  print('Canonical form:\n$canonical1');
 }
 ```
 
 ## ✨ Features
 
-- **Type-safe RDF model:** IRIs, literals, triples, graphs, quads, datasets, and more
-- **RDF 1.1 Dataset support:** Full support for named graphs with `RdfDataset`, `Quad`, and `RdfNamedGraph`
-- **Multiple serialization formats:** Turtle, JSON-LD, N-Triples, and N-Quads
-- **Automatic performance optimization:** Lazy indexing provides O(1) queries with zero memory cost until needed
-- **Graph composition workflows:** Create, filter, and chain graphs with fluent API
-- **Extensible & modular:** Create your own adapters, plugins, and integrations
-- **Specification compliant:** Follows [W3C RDF 1.1](https://www.w3.org/TR/rdf11-concepts/) and related standards
-- **Convenient global variables:** Easy to use with `turtle`, `jsonld`, `ntriples`, and `nquads` for quick encoding/decoding
+- **RDF Graph Canonicalization:** Deterministic serialization of RDF graphs with blank nodes
+- **RDF Dataset Canonicalization:** Support for named graphs and quads canonicalization
+- **Isomorphism Testing:** Test semantic equivalence between RDF graphs and datasets
+- **Configurable Hash Algorithms:** Support for SHA-256 and SHA-384 hashing
+- **Blank Node Relabeling:** Deterministic blank node identifier assignment
+- **Standards Compliant:** Implements the RDF Dataset Canonicalization specification
+- **Easy Integration:** Works seamlessly with `rdf_core` for complete RDF processing workflows
 
 ## Core API Usage
 
-### Global Variables for Easy Access
+### Basic Canonicalization
 
 ```dart
 import 'package:rdf_canonicalization/rdf_canonicalization.dart';
-
-// Global variables for quick access to codecs
-final graphFromTurtle = turtle.decode(turtleString);
-final graphFromJsonLd = jsonldGraph.decode(jsonLdString);
-final graphFromNTriples = ntriples.decode(ntriplesString);
-final datasetFromNQuads = nquads.decode(nquadsString);
-
-// Or use the preconfigured RdfCore instance
-final graph = rdf.decode(data, contentType: 'text/turtle');
-final encoded = rdf.encode(graph, contentType: 'application/ld+json');
-final dataset = rdf.decodeDataset(data, contentType: 'application/n-quads');
-final encodedDataset = rdf.encodeDataset(dataset, contentType: 'application/n-quads');
-```
-
-### Manually Creating a Graph
-
-```dart
-import 'package:rdf_canonicalization/rdf_canonicalization.dart';
+import 'package:rdf_core/rdf_core.dart';
 
 void main() {
-  // Create an empty graph
-  final graph = RdfGraph();
-  
-  // Create a triple
-  final subject = const IriTerm('http://example.org/alice');
-  final predicate = const IriTerm('http://xmlns.com/foaf/0.1/name');
-  final object = LiteralTerm.string('Alice');
-  final triple = Triple(subject, predicate, object);
-  final graph = RdfGraph(triples: [triple]);
+  // Create an RDF graph with blank nodes
+  final alice = BlankNodeTerm();
+  final bob = BlankNodeTerm();
+  final graph = RdfGraph(triples: [
+    Triple(alice, const IriTerm('http://xmlns.com/foaf/0.1/name'), LiteralTerm.string('Alice')),
+    Triple(alice, const IriTerm('http://xmlns.com/foaf/0.1/knows'), bob),
+    Triple(bob, const IriTerm('http://xmlns.com/foaf/0.1/name'), LiteralTerm.string('Bob')),
+  ]);
 
-  print(graph);
+  // Get canonical N-Quads representation
+  final canonical = canonicalizeGraph(graph);
+  print('Canonical representation:\n$canonical');
 }
 ```
 
-### Decoding and Encoding Turtle
+### Real-World Isomorphism Problem
 
 ```dart
 import 'package:rdf_canonicalization/rdf_canonicalization.dart';
+import 'package:rdf_core/rdf_core.dart';
 
 void main() {
-  // Example: Decode a simple Turtle document
-  final turtleData = '''
-    @prefix foaf: <http://xmlns.com/foaf/0.1/> .
-    <http://example.org/alice> foaf:name "Alice"@en .
+  // Two N-Quads documents from different sources with same semantic meaning
+  final document1 = '''
+    _:student <http://schema.org/name> "Alice Johnson" .
+    _:student <http://schema.org/enrolledIn> _:course .
+    _:course <http://schema.org/name> "Computer Science" .
   ''';
 
-  // Option 1: Using the convenience global variable
-  final graph = turtle.decode(turtleData);
-  
-  // Option 2: Using RdfCore instance
-  // final rdfCore = RdfCore.withStandardCodecs();
-  // final graph = rdfCore.decode(turtleData, contentType: 'text/turtle');
-
-  // Print decoded triples
-  for (final triple in graph.triples) {
-    print('${triple.subject} ${triple.predicate} ${triple.object}');
-  }
-
-  // Encode the graph back to Turtle
-  final serialized = turtle.encode(graph);
-  print('\nEncoded Turtle:\n$serialized');
-}
-```
-
-### Decoding and Encoding N-Triples
-
-```dart
-import 'package:rdf_canonicalization/rdf_canonicalization.dart';
-
-void main() {
-  // Example: Decode a simple N-Triples document
-  final ntriplesData = '''
-    <http://example.org/alice> <http://xmlns.com/foaf/0.1/name> "Alice"@en .
-    <http://example.org/alice> <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> .
+  final document2 = '''
+    _:s1 <http://schema.org/name> "Alice Johnson" .
+    _:s1 <http://schema.org/enrolledIn> _:c1 .
+    _:c1 <http://schema.org/name> "Computer Science" .
   ''';
 
-  // Using the convenience global variable
-  final graph = ntriples.decode(ntriplesData);
+  // Parse both documents
+  final data1 = nquads.decode(document1);
+  final data2 = nquads.decode(document2);
 
-  // Print decoded triples
-  for (final triple in graph.triples) {
-    print('${triple.subject} ${triple.predicate} ${triple.object}');
-  }
+  // Different representations, same meaning
+  print('Documents are string-identical: ${document1 == document2}'); // false
+  print('Datasets are object-equal: ${data1 == data2}'); // false
+  print('But semantically isomorphic: ${isIsomorphic(data1, data2)}'); // true
 
-  // Encode the graph back to N-Triples
-  final serialized = ntriples.encode(graph);
-  print('\nEncoded N-Triples:\n$serialized');
+  // Show canonical forms are identical
+  print('\nCanonical form 1:\n${canonicalize(data1)}');
+  print('Canonical form 2:\n${canonicalize(data2)}');
+  print('Canonical forms match: ${canonicalize(data1) == canonicalize(data2)}'); // true
 }
 ```
 
-### Decoding and Encoding JSON-LD
+### Working with RDF Datasets
 
 ```dart
 import 'package:rdf_canonicalization/rdf_canonicalization.dart';
+import 'package:rdf_core/rdf_core.dart';
 
 void main() {
-  // Example: Decode a simple JSON-LD document
-  final jsonLdData = '''
-  {
-    "@context": {
-      "name": "http://xmlns.com/foaf/0.1/name",
-      "knows": {
-        "@id": "http://xmlns.com/foaf/0.1/knows",
-        "@type": "@id"
-      },
-      "Person": "http://xmlns.com/foaf/0.1/Person"
-    },
-    "@id": "http://example.org/alice",
-    "@type": "Person",
-    "name": "Alice",
-    "knows": [
-      {
-        "@id": "http://example.org/bob",
-        "@type": "Person",
-        "name": "Bob"
-      }
-    ]
+  // Create dataset with named graphs and blank nodes
+  final person = BlankNodeTerm();
+  final orgGraph = const IriTerm('http://example.org/graphs/organizations');
+
+  final dataset = RdfDataset.fromQuads([
+    // Default graph
+    Quad(person, const IriTerm('http://xmlns.com/foaf/0.1/name'), LiteralTerm.string('Alice')),
+
+    // Named graph
+    Quad(
+      BlankNodeTerm(),
+      const IriTerm('http://xmlns.com/foaf/0.1/name'),
+      LiteralTerm.string('ACME Corp'),
+      orgGraph
+    ),
+  ]);
+
+  // Canonicalize the entire dataset
+  final canonical = canonicalize(dataset);
+  print('Canonical dataset:\n$canonical');
+
+  // Test isomorphism between datasets
+  final dataset2 = RdfDataset.fromQuads([
+    Quad(
+      BlankNodeTerm(),
+      const IriTerm('http://xmlns.com/foaf/0.1/name'),
+      LiteralTerm.string('ACME Corp'),
+      orgGraph
+    ),
+    Quad(BlankNodeTerm(), const IriTerm('http://xmlns.com/foaf/0.1/name'), LiteralTerm.string('Alice')),
+  ]);
+
+  if (isIsomorphic(dataset, dataset2)) {
+    print('Datasets are semantically equivalent!');
   }
-  ''';
-
-  // Using the convenience global variable
-  final graph = jsonldGraph.decode(jsonLdData);
-
-  // Print decoded triples
-  for (final triple in graph.triples) {
-    print('${triple.subject} ${triple.predicate} ${triple.object}');
-  }
-
-  // Encode the graph back to JSON-LD
-  final serialized = jsonldGraph.encode(graph);
-  print('\nEncoded JSON-LD:\n$serialized');
 }
 ```
 
-### Working with RDF Datasets and N-Quads
+### Custom Canonicalization Options
 
 ```dart
 import 'package:rdf_canonicalization/rdf_canonicalization.dart';
+import 'package:rdf_core/rdf_core.dart';
 
 void main() {
-  // Create quads with graph context
-  final alice = const IriTerm('http://example.org/alice');
-  final bob = const IriTerm('http://example.org/bob');
-  final foafName = const IriTerm('http://xmlns.com/foaf/0.1/name');
-  final foafKnows = const IriTerm('http://xmlns.com/foaf/0.1/knows');
-  final peopleGraph = const IriTerm('http://example.org/graphs/people');
+  final graph = RdfGraph(triples: [
+    Triple(BlankNodeTerm(), const IriTerm('http://example.org/property'), LiteralTerm.string('value')),
+  ]);
 
-  final quads = [
-    Quad(alice, foafName, LiteralTerm.string('Alice')), // default graph
-    Quad(alice, foafKnows, bob, peopleGraph), // named graph
-    Quad(bob, foafName, LiteralTerm.string('Bob'), peopleGraph), // named graph
-  ];
+  // Use SHA-384 instead of default SHA-256
+  final options = const CanonicalizationOptions(
+    hashAlgorithm: CanonicalHashAlgorithm.sha384,
+    blankNodePrefix: 'custom'
+  );
 
-  // Create dataset from quads
-  final dataset = RdfDataset.fromQuads(quads);
-
-  // Option 1: Using the convenience global variable
-  final nquadsData = nquads.encode(dataset);
-
-  // Option 2: Using RdfCore instance
-  // final nquadsData = rdf.encodeDataset(dataset, contentType: 'application/n-quads');
-
-  print('N-Quads output:\n$nquadsData');
-
-  // Decode N-Quads data back to dataset
-  final decodedDataset = nquads.decode(nquadsData);
-
-  // Access default and named graphs
-  print('Default graph has ${decodedDataset.defaultGraph.triples.length} triples');
-  print('Dataset has ${decodedDataset.namedGraphs.length} named graphs');
-
-  for (final namedGraph in decodedDataset.namedGraphs) {
-    print('Named graph ${namedGraph.name} has ${namedGraph.graph.triples.length} triples');
-  }
+  final canonical = canonicalizeGraph(graph, options: options);
+  print('Canonical with SHA-384:\n$canonical');
 }
 ```
 
 ## 🧑‍💻 Advanced Usage
 
-### Decoding and Encoding RDF/XML
-
-With the help of the separate package [rdf_xml](https://github.com/kkalass/rdf_xml) you can easily encode/decode RDF/XML as well.
-
-```bash
-dart pub add rdf_xml
-```
+### Working with Canonical Classes
 
 ```dart
 import 'package:rdf_canonicalization/rdf_canonicalization.dart';
-import 'package:rdf_xml/rdf_xml.dart';
+import 'package:rdf_core/rdf_core.dart';
 
 void main() {
-  
-  // Option 1: Use the codec directly
-  final graph = rdfxml.decode(rdfXmlData);
-  final serialized = rdfxml.encode(graph);
-  
-  // Option 2: Register with RdfCore
-  final rdf = RdfCore.withStandardCodecs(additionalCodecs: [RdfXmlCodec()])
-  
-  // Now it can be used with the rdf instance in addition to turtle etc.
-  final graphFromRdf = rdf.decode(rdfXmlData, contentType: 'application/rdf+xml');
+  final graph = RdfGraph(triples: [
+    Triple(BlankNodeTerm(), const IriTerm('http://example.org/name'), LiteralTerm.string('Example')),
+  ]);
+
+  // Create a canonical graph for repeated isomorphism tests (more efficient)
+  final canonicalGraph = CanonicalRdfGraph(graph);
+
+  // Create another canonical graph
+  final graph2 = RdfGraph(triples: [
+    Triple(BlankNodeTerm(), const IriTerm('http://example.org/name'), LiteralTerm.string('Example')),
+  ]);
+  final canonicalGraph2 = CanonicalRdfGraph(graph2);
+
+  // Direct comparison using canonical forms (efficient)
+  if (canonicalGraph == canonicalGraph2) {
+    print('Graphs are isomorphic');
+  }
+
+  // Access the canonical N-Quads string
+  print('Canonical form: ${canonicalGraph.canonicalNQuads}');
 }
 ```
 
-### Graph Merging
-
-```dart
-final merged = graph1.merge(graph2);
-```
-
-### Pattern Queries
-
-```dart
-// Find triples matching a pattern
-final results = graph.findTriples(subject: subject);
-
-// Check if matching triples exist (more efficient than findTriples when you only need boolean result)
-if (graph.hasTriples(subject: john, predicate: foaf.name)) {
-  print('John has a name property');
-}
-
-// Create filtered graphs for composition and chaining
-final johnGraph = graph.matching(subject: john);
-final typeGraph = graph.matching(predicate: rdf.type);
-
-// Chain operations for powerful workflows
-final result = graph
-  .matching(subject: john)      // Get all John's information
-  .merge(otherGraph)           // Add additional data
-  .matching(predicate: foaf.knows); // Filter to relationships only
-```
-
-### Blank Node Handling
-
-```dart
-// Note: BlankNodeTerm is based on identity - if you call BlankNodeTerm() 
-// a second time, it will be a different blank node and get a different 
-// label in encoding codecs. You have to reuse an instance, if you
-// want to refer to the same blank node.
-final bnode = BlankNodeTerm();
-final newGraph = graph.withTriple(Triple(bnode, predicate, object));
-```
-
-### Non-Standard Turtle decoding
+### Integration with RDF Core
 
 ```dart
 import 'package:rdf_canonicalization/rdf_canonicalization.dart';
+import 'package:rdf_core/rdf_core.dart';
 
-final nonStandardTurtle = '''
-@base <http://my.example.org/> .
-@prefix ex: <http://example.org/> 
-ex:resource123 a Type . // "Type" without prefix is resolved to <http://my.example.org/Type>
-''';
+void main() {
+  // Parse RDF data and canonicalize
+  final turtleData = '''
+    @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+    _:alice foaf:name "Alice" .
+    _:bob foaf:name "Bob" .
+    _:alice foaf:knows _:bob .
+  ''';
 
-// Create an options instance with the appropriate configuration
-final options = TurtleDecoderOptions(
-  parsingFlags: {
-    TurtleParsingFlag.allowDigitInLocalName,       // Allow local names with digits like "resource123"
-    TurtleParsingFlag.allowMissingDotAfterPrefix,  // Allow prefix declarations without trailing dot
-    TurtleParsingFlag.allowIdentifiersWithoutColon, // Treat terms without colon as IRIs resolved against base URI
+  final graph = turtle.decode(turtleData);
+  final canonical = canonicalizeGraph(graph);
+
+  print('Canonical representation:');
+  print(canonical);
+
+  // Parse the canonical form back to verify
+  final canonicalGraph = ntriples.decode(canonical);
+
+  // Verify they are isomorphic
+  assert(isIsomorphicGraphs(graph, canonicalGraph));
+  print('Original and canonical graphs are isomorphic: ✓');
+}
+```
+
+### Performance Considerations
+
+```dart
+import 'package:rdf_canonicalization/rdf_canonicalization.dart';
+import 'package:rdf_core/rdf_core.dart';
+
+void main() {
+  final graphs = <RdfGraph>[];
+
+  // Create multiple graphs for comparison
+  for (int i = 0; i < 100; i++) {
+    final graph = RdfGraph(triples: [
+      Triple(BlankNodeTerm(), const IriTerm('http://example.org/id'), LiteralTerm.string('$i')),
+    ]);
+    graphs.add(graph);
   }
-);
 
-// Option 1: Use the options with the global rdf variable
-final graph = rdf.decode(nonStandardTurtle, options: options);
+  // For many isomorphism tests, pre-compute canonical forms
+  final canonicalGraphs = graphs.map((g) => CanonicalRdfGraph(g)).toList();
 
-// Option 2: Use the options to derive a new codec from the global turtle variable
-final configuredTurtle = turtle.withOptions(decoder: options);
-final graph2 = configuredTurtle.decode(nonStandardTurtle);
-
-// Option 3: Configure a custom TurtleCodec with specific parsing flags
-final customTurtleCodec = TurtleCodec(decoderOptions: options);
-final graph3 = customTurtleCodec.decode(nonStandardTurtle);
-
-// Option 4: Register the custom codec with an RdfCore instance - note that this 
-// time we register only the specified codecs here. If we want jsonld, we have to 
-// add it to the list as well.
-final customRdf = RdfCore.withCodecs(codecs: [customTurtleCodec]);
-final graph4 = customRdf.decode(nonStandardTurtle, contentType: 'text/turtle');
+  // Now comparisons are O(1) string comparisons instead of expensive graph isomorphism
+  for (int i = 0; i < canonicalGraphs.length; i++) {
+    for (int j = i + 1; j < canonicalGraphs.length; j++) {
+      if (canonicalGraphs[i] == canonicalGraphs[j]) {
+        print('Graphs $i and $j are isomorphic');
+      }
+    }
+  }
+}
 ```
 
 ---
 
 ## ⚠️ Error Handling
 
-- All core methods throw Dart exceptions (e.g., `ArgumentError`, `RdfValidationException`) for invalid input or constraint violations.
-- Catch and handle exceptions for robust RDF processing.
+- Canonicalization functions throw `ArgumentError` for invalid input or null graphs/datasets
+- Hash computation may throw `CanonicalizationException` for unsupported hash algorithms
+- Catch and handle exceptions for robust canonicalization processing
 
 ---
 
 ## 🚦 Performance
 
-- Triple, Term, and IRI equality/hashCode are O(1)
-- **Automatic query optimization**: Lazy indexing provides O(1) subject-based queries with zero memory cost until first use
-- Graph queries (`findTriples`, `hasTriples`) benefit from transparent performance improvements
-- Designed for large-scale, high-performance RDF workloads with intelligent caching
+- **Efficient blank node handling**: Uses optimized hash-based blank node labeling algorithm
+- **Deterministic ordering**: Lexicographic sorting ensures consistent canonical output
+- **Optimized for isomorphism testing**: `CanonicalRdfGraph` and `CanonicalRdfDataset` cache canonical forms for O(1) equality comparison
+- **Configurable hashing**: Choose between SHA-256 (faster) and SHA-384 (more secure) based on your needs
 
 ---
 
 ## 🗺️ API Overview
 
-| Type           | Description                                   |
-|----------------|-----------------------------------------------|
-| `IriTerm`      | Represents an IRI (Internationalized Resource Identifier) |
-| `LiteralTerm`  | Represents an RDF literal value               |
-| `BlankNodeTerm`| Represents a blank node                       |
-| `Triple`       | Atomic RDF statement (subject, predicate, object) |
-| `Quad`         | RDF statement with optional graph context (subject, predicate, object, graph) |
-| `RdfGraph`     | Collection of RDF triples with automatic query optimization |
-| `RdfDataset`   | Collection of named graphs plus a default graph |
-| `RdfNamedGraph`| A named graph pair (name + graph)            |
-| `RdfGraph.findTriples()` | Find triples matching a pattern (O(1) for subject-based queries) |
-| `RdfGraph.hasTriples()` | Check if matching triples exist (boolean result, optimized) |
-| `RdfGraph.matching()` | Create filtered graphs for composition and chaining |
-| `RdfGraphCodec`     | Base class for decoding/encoding RDF Graphs in various formats |
-| `RdfDatasetCodec`   | Base class for decoding/encoding RDF Datasets in various formats |
-| `RdfGraphDecoder`   | Base class for decoding RDF Graphs                   |
-| `RdfGraphEncoder`   | Base class for encoding RDF Graphs                   |
-| `RdfDatasetDecoder` | Base class for decoding RDF Datasets                 |
-| `RdfDatasetEncoder` | Base class for encoding RDF Datasets                 |
-| `turtle`       | Global convenience variable for Turtle codec |
-| `jsonldGraph`  | Global convenience variable for JSON-LD codec |
-| `ntriples`     | Global convenience variable for N-Triples codec |
-| `nquads`       | Global convenience variable for N-Quads codec |
-| `rdf`          | Global RdfCore instance with standard codecs  |
+| Type/Function           | Description                                   |
+|------------------------|-----------------------------------------------|
+| `canonicalize()`       | Canonicalize an RdfDataset to N-Quads string |
+| `canonicalizeGraph()`  | Canonicalize an RdfGraph to N-Quads string   |
+| `isIsomorphic()`       | Test if two RdfDatasets are isomorphic       |
+| `isIsomorphicGraphs()` | Test if two RdfGraphs are isomorphic         |
+| `CanonicalRdfGraph`    | Cached canonical representation of an RdfGraph |
+| `CanonicalRdfDataset`  | Cached canonical representation of an RdfDataset |
+| `CanonicalizationOptions` | Configuration for hash algorithm and blank node prefix |
+| `CanonicalHashAlgorithm` | Enum for SHA-256 or SHA-384 hash algorithms |
 
 ---
 
 ## 📚 Standards & References
 
-- [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/)
-- [RDF 1.1 Datasets](https://www.w3.org/TR/rdf11-datasets/)
-- [Turtle: Terse RDF Triple Language](https://www.w3.org/TR/turtle/)
-- [N-Triples](https://www.w3.org/TR/n-triples/)
-- [N-Quads](https://www.w3.org/TR/n-quads/)
-- [JSON-LD 1.1](https://www.w3.org/TR/json-ld11/)
-- [SHACL: Shapes Constraint Language](https://www.w3.org/TR/shacl/)
+- [RDF Dataset Canonicalization](https://www.w3.org/TR/rdf-canon/) - W3C Specification for RDF canonicalization
+- [RDF 1.1 Concepts](https://www.w3.org/TR/rdf11-concepts/) - Core RDF concepts and abstract syntax
+- [RDF 1.1 Datasets](https://www.w3.org/TR/rdf11-datasets/) - RDF datasets with named graphs
+- [N-Quads](https://www.w3.org/TR/n-quads/) - Line-based syntax for RDF datasets (canonical output format)
 
 ---
 
-## 🧠 Object Mapping with rdf_mapper
+## 🧠 Use Cases
 
-For object-oriented access to RDF data, our companion project `rdf_mapper` allows seamless mapping between Dart objects and RDF. It works especially well with `rdf_vocabularies`, which provides constants for well-known vocabularies (like schema.org's `Person` available as the `SchemaPerson` class):
+RDF canonicalization is essential for:
 
-```dart
-// Our simple dart class
-class Person {
-  final String id;
-  final String givenName;
+- **Digital Signatures**: Ensuring RDF data can be reliably signed and verified
+- **Caching and Deduplication**: Using canonical forms as consistent cache keys
+- **Data Synchronization**: Detecting changes in RDF datasets reliably
+- **Graph Comparison**: Testing semantic equality between different RDF representations
+- **Compliance and Standards**: Meeting requirements for deterministic RDF serialization
 
-  Person({required this.id, this.givenName})
-}
+---
 
-// Define a Mapper with our API for mapping between RDF and Objects
-class PersonMapper implements IriNodeMapper<Person> {
-  @override
-  IriTerm? get typeIri => SchemaPerson.classIri;
-  
-  @override
-  (IriTerm, List<Triple>) toRdfNode(Person value, SerializationContext context, {RdfSubject? parentSubject}) {
+## 🛣️ Roadmap
 
-    // convert dart objects to triples using the fluent builder API
-    return context.nodeBuilder(const IriTerm(value.id))
-      .literal(SchemaPerson.givenName, value.givenName)
-      .build();
-  }
-  
-  @override
-  Person fromRdfNode(IriTerm term, DeserializationContext context) {
-    final reader = context.reader(term);
-    
-    return Person(
-      id: term.iri,
-      name: reader.require<String>(SchemaPerson.givenName),
-    );
-  }
-}
-
-// Register our Mapper and create the rdfMapper facade
-final rdfMapper = RdfMapper.withMappers((registry) {
-  registry.registerMapper<Person>(PersonMapper());
-});
-
-// Create RDF representation from Dart objects
-final person = Person(id: "https://example.com/person/234234", givenName: "John");
-final turtle = rdfMapper.encode(person);
-
-// Create JSON-LD representation
-final jsonLd = rdfMapper.encode(person, contentType: 'application/ld+json');
-
-// Access the underlying RDF graph
-final graph = rdfMapper.graph.encode(person);
-```
-
-## 🛣️ Roadmap / Next Steps
-
-- Improve jsonld decoder/encoder (full RdfDataset support, better support for base uri, include realworld tests for e.g. foaf.jsonld, support @vocab)
-- RDF 1.2: Rdf-Star
-- SHACL and schema validation
-- Performance optimizations for large graphs
-- Optimize streaming decoding and encoding
+- **Performance optimizations** for large graphs with many blank nodes
+- **Streaming canonicalization** for memory-efficient processing of large datasets
+- **RDF-star support** when the specification is finalized
+- **Additional hash algorithms** as standardized by W3C
 
 ---
 

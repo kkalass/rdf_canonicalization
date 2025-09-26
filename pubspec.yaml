@@ -1,16 +1,16 @@
 name: rdf_canonicalization
-description: A type-safe, modular Dart library for modeling, encoding, and decoding RDF data.
-version: 0.9.19-dev
+description: A Dart library for RDF graph canonicalization and isomorphism testing, implementing the W3C RDF Dataset Canonicalization specification.
+version: 0.1.0
 homepage: https://kkalass.github.io/rdf_canonicalization/
 repository: https://github.com/kkalass/rdf_canonicalization
 issue_tracker: https://github.com/kkalass/rdf_canonicalization/issues
 documentation: https://kkalass.github.io/rdf_canonicalization/
 topics:
   - rdf
-  - linked-data
+  - canonicalization
+  - graph-isomorphism
   - semantic-web
-  - graph
-  - serialization
+  - blank-nodes
 readme: README.md
 changelog: CHANGELOG.md
 license: LICENSE
@@ -22,10 +22,8 @@ environment:
 
 # Add regular dependencies here.
 dependencies:
-  logging: ^1.2.0
   crypto: ^3.0.3
-  rdf_core: 
-    path: ../rdf_core
+  rdf_core: ^0.9.19
 
 dev_dependencies:
   test: ^1.24.0

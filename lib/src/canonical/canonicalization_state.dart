@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:rdf_core/rdf_core.dart';
 
+import 'canonical_util.dart';
 import 'identifier_issuer.dart';
 
 class CanonicalizationState {
@@ -18,15 +19,30 @@ class CanonicalizationState {
   /// Map from BlankNodeTerm instances to their string identifiers
   final Map<BlankNodeTerm, String> blankNodeIdentifiers;
 
+  /// Canonicalization options including hash algorithm
+  final CanonicalizationOptions options;
+
   CanonicalizationState({
     Map<String, List<Quad>>? blankNodeToQuadsMap,
     Map<String, List<String>>? hashToBlankNodesMap,
     IdentifierIssuer? canonicalIssuer,
     Map<BlankNodeTerm, String>? blankNodeIdentifiers,
+    CanonicalizationOptions? options,
   })  : blankNodeToQuadsMap = blankNodeToQuadsMap ?? {},
         hashToBlankNodesMap = hashToBlankNodesMap ?? {},
-        canonicalIssuer = canonicalIssuer ?? IdentifierIssuer('c14n'),
-        blankNodeIdentifiers = blankNodeIdentifiers ?? {};
+        canonicalIssuer = canonicalIssuer ?? IdentifierIssuer((options ?? const CanonicalizationOptions()).blankNodePrefix),
+        blankNodeIdentifiers = blankNodeIdentifiers ?? {},
+        options = options ?? const CanonicalizationOptions();
+
+  /// Get the hash function based on the configured algorithm
+  Hash _getHashFunction() {
+    switch (options.hashAlgorithm) {
+      case CanonicalHashAlgorithm.sha256:
+        return sha256;
+      case CanonicalHashAlgorithm.sha384:
+        return sha384;
+    }
+  }
 
   /// Hash First Degree Quads algorithm
   String hashFirstDegreeQuads(String identifier) {
@@ -43,7 +59,7 @@ class CanonicalizationState {
     // Concatenate and hash
     final concatenated = nquads.join('');
     final bytes = utf8.encode(concatenated);
-    final digest = sha256.convert(bytes);
+    final digest = _getHashFunction().convert(bytes);
     return digest.toString();
   }
 
@@ -169,7 +185,7 @@ class CanonicalizationState {
     // Create final hash
     final concatenated = nquads.join('');
     final bytes = utf8.encode(concatenated);
-    final digest = sha256.convert(bytes);
+    final digest = _getHashFunction().convert(bytes);
     return digest.toString();
   }
 

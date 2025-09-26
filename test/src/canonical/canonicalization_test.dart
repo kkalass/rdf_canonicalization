@@ -4,6 +4,86 @@ import 'package:rdf_canonicalization/src/canonical/canonical_util.dart';
 
 void main() {
   group('RDF Canonicalization', () {
+    test('should handle different N-Quads with same semantics', () {
+      // Two N-Quads documents with identical semantic content but different labels
+      final nquads1 = '''
+_:alice <http://xmlns.com/foaf/0.1/name> "Alice" .
+_:alice <http://xmlns.com/foaf/0.1/knows> _:bob .
+_:bob <http://xmlns.com/foaf/0.1/name> "Bob" .
+''';
+
+      final nquads2 = '''
+_:person1 <http://xmlns.com/foaf/0.1/name> "Alice" .
+_:person1 <http://xmlns.com/foaf/0.1/knows> _:person2 .
+_:person2 <http://xmlns.com/foaf/0.1/name> "Bob" .
+''';
+
+      // Parse both documents
+      final dataset1 = nquads.decode(nquads1);
+      final dataset2 = nquads.decode(nquads2);
+
+      // They are different as objects
+      expect(dataset1, isNot(equals(dataset2)));
+
+      // But semantically equivalent
+      expect(isIsomorphic(dataset1, dataset2), isTrue);
+
+      // And produce identical canonical forms
+      final canonical1 = canonicalize(dataset1);
+      final canonical2 = canonicalize(dataset2);
+      expect(canonical1, equals(canonical2));
+    });
+
+    test('Different ordering should be identical in canonical mode', () {
+      // Same semantic content, different input order
+      final bnode1 = BlankNodeTerm();
+      final bnode2 = BlankNodeTerm();
+
+      final dataset1 = RdfDataset.fromQuads([
+        Quad(bnode1, const IriTerm('http://example.org/name'),
+            LiteralTerm.string('Alice')),
+        Quad(bnode2, const IriTerm('http://example.org/age'),
+            LiteralTerm.integer(30)),
+      ]);
+
+      final dataset2 = RdfDataset.fromQuads([
+        Quad(bnode2, const IriTerm('http://example.org/age'),
+            LiteralTerm.integer(30)),
+        Quad(bnode1, const IriTerm('http://example.org/name'),
+            LiteralTerm.string('Alice')),
+      ]);
+
+      // These should be isomorphic (same structure: two distinct blank nodes with different properties)
+      expect(isIsomorphic(dataset1, dataset2), isTrue);
+    });
+
+    test('should detect that non-canonical encoding preserves input order', () {
+      // This verifies the current (correct) behavior of non-canonical encoding
+      final bnode1 = BlankNodeTerm();
+      final bnode2 = BlankNodeTerm();
+
+      final dataset1 = RdfDataset.fromQuads([
+        Quad(bnode1, const IriTerm('http://example.org/name'),
+            LiteralTerm.string('Alice')),
+        Quad(bnode2, const IriTerm('http://example.org/age'),
+            LiteralTerm.integer(30)),
+      ]);
+
+      final dataset2 = RdfDataset.fromQuads([
+        Quad(bnode2, const IriTerm('http://example.org/age'),
+            LiteralTerm.integer(30)),
+        Quad(bnode1, const IriTerm('http://example.org/name'),
+            LiteralTerm.string('Alice')),
+      ]);
+
+      // Non-canonical encoding should preserve input order (this is correct behavior)
+      final encoder = NQuadsEncoder();
+      final encoded1 = encoder.encode(dataset1);
+      final encoded2 = encoder.encode(dataset2);
+
+      // These should be different due to different input order
+      expect(encoded1, isNot(equals(encoded2)));
+    });
     test('should canonicalize simple blank node graph', () {
       // Create a simple graph with blank nodes
       final bnode1 = BlankNodeTerm();
