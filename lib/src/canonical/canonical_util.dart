@@ -1,6 +1,8 @@
 import 'package:rdf_core/rdf_core.dart';
 
+import 'blank_node_hasher.dart';
 import 'canonicalization_state.dart';
+import 'hash_path_calculator.dart';
 import 'identifier_issuer.dart';
 
 enum CanonicalHashAlgorithm { sha256, sha384 }
@@ -36,9 +38,14 @@ CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
   final state = _createCanonicalizationState(dataset, inputLabels, options);
 
   // Step 2: For every blank node identifier, compute first-degree hash
+  final hasher = BlankNodeHasher(
+    blankNodeToQuadsMap: state.blankNodeToQuadsMap,
+    blankNodeIdentifiers: state.blankNodeIdentifiers,
+    options: options,
+  );
 
   for (final identifier in state.blankNodeToQuadsMap.keys) {
-    final hash = state.hashFirstDegreeQuads(identifier);
+    final hash = hasher.computeFirstDegreeHash(identifier);
 
     // Add to hash-to-blank-nodes map
     state.hashToBlankNodesMap.putIfAbsent(hash, () => []).add(identifier);
@@ -61,28 +68,23 @@ CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
   }
 
   // Step 4: For every non-unique hash, use N-degree hashing and issue canonical identifiers
+  final hashPathCalculator = HashPathCalculator(hasher);
+
   for (final hash in nonUniqueHashes) {
     final identifiers = state.hashToBlankNodesMap[hash]!;
 
-    // Create hash path list for N-degree processing
-    final hashPathList = <HashPathResult>[];
+    // Filter out already canonically labeled identifiers
+    final unlabeledIdentifiers = identifiers
+        .where((id) => !state.canonicalIssuer.issuedIdentifiersMap.containsKey(id))
+        .toList();
 
-    for (final identifier in identifiers) {
-      // Skip if already canonically labeled
-      if (state.canonicalIssuer.issuedIdentifiersMap.containsKey(identifier)) {
-        continue;
-      }
+    if (unlabeledIdentifiers.isEmpty) continue;
 
-      // Create temporary issuer for this branch
-      final tempIssuer = IdentifierIssuer('_:b');
-
-      // Create hash path result using N-degree hashing
-      final hashPathResult = state.createHashPath(identifier, tempIssuer);
-      hashPathList.add(hashPathResult);
-    }
-
-    // Sort hash path list by hash value for deterministic ordering
-    hashPathList.sort((a, b) => a.hash.compareTo(b.hash));
+    // Create sorted hash paths for N-degree processing
+    final hashPathList = hashPathCalculator.createSortedHashPaths(
+      unlabeledIdentifiers,
+      state.canonicalIssuer,
+    );
 
     // Issue canonical identifiers in sorted order
     for (final hashPath in hashPathList) {
