@@ -6,12 +6,13 @@ import 'package:rdf_core/rdf_core.dart';
 import 'canonical_util.dart';
 import 'identifier_issuer.dart';
 import 'quad_serializer.dart';
+import 'quad_extension.dart';
 
 /// Handles hash computation for blank nodes during RDF canonicalization.
 /// Encapsulates the logic for both first-degree and N-degree hash computation
 /// as specified in the RDF Dataset Canonicalization specification.
 class BlankNodeHasher {
-  final Map<String, List<Quad>> blankNodeToQuadsMap;
+  final Map<String, Set<Quad>> blankNodeToQuadsMap;
   final Map<BlankNodeTerm, String> blankNodeIdentifiers;
   final QuadSerializer quadSerializer;
   final CanonicalizationOptions options;
@@ -35,19 +36,20 @@ class BlankNodeHasher {
   /// Computes the first-degree hash for a blank node identifier.
   /// This hash is based only on the immediate quads that contain the blank node.
   String computeFirstDegreeHash(String identifier) {
-    final quads = blankNodeToQuadsMap[identifier] ?? [];
-    final nquads = <String>[];
-
-    for (final quad in quads) {
-      nquads.add(quadSerializer.serializeForFirstDegreeHashing(quad, identifier));
-    }
+    final mentions = blankNodeToQuadsMap[identifier] ?? {};
+    final nquads = mentions
+        .map((quad) => quadSerializer.toFirstDegreeNQuad(quad, identifier))
+        .toList();
 
     // Sort in Unicode code point order for deterministic results
     nquads.sort();
 
     // Concatenate and hash
-    final concatenated = nquads.join('');
-    final bytes = utf8.encode(concatenated);
+    return _computeHash(nquads.join(''));
+  }
+
+  String _computeHash(String input) {
+    final bytes = utf8.encode(input);
     final digest = _getHashFunction().convert(bytes);
     return digest.toString();
   }
@@ -63,7 +65,7 @@ class BlankNodeHasher {
     tempIssuer.issueIdentifier(identifier);
 
     // Get quads for this identifier
-    final quads = blankNodeToQuadsMap[identifier] ?? [];
+    final quads = blankNodeToQuadsMap[identifier] ?? {};
 
     // Find all related blank nodes and their first-degree hashes
     final relatedBlankNodes = _findRelatedBlankNodes(quads, identifier);
@@ -81,7 +83,8 @@ class BlankNodeHasher {
       branchIssuer.issueIdentifier(relatedId);
 
       // Serialize quads involving both nodes
-      final relatedQuads = _getQuadsInvolvingRelatedNode(quads, identifier, relatedId, branchIssuer);
+      final relatedQuads = _getQuadsInvolvingRelatedNode(
+          quads, identifier, relatedId, branchIssuer);
 
       // Sort and add to hash data
       relatedQuads.sort();
@@ -97,17 +100,16 @@ class BlankNodeHasher {
 
   /// Finds all blank nodes that are related to the given identifier
   /// (appear in the same quads) and returns their first-degree hashes.
-  Map<String, String> _findRelatedBlankNodes(List<Quad> quads, String identifier) {
+  Map<String, String> _findRelatedBlankNodes(
+      Iterable<Quad> quads, String identifier) {
     final relatedBlankNodes = <String, String>{};
 
     for (final quad in quads) {
-      for (final term in [quad.subject, quad.object]) {
-        if (term is BlankNodeTerm) {
-          final relatedId = blankNodeIdentifiers[term];
-          if (relatedId != null && relatedId != identifier) {
-            if (!relatedBlankNodes.containsKey(relatedId)) {
-              relatedBlankNodes[relatedId] = computeFirstDegreeHash(relatedId);
-            }
+      for (final term in quad.blankNodes) {
+        final relatedId = blankNodeIdentifiers[term];
+        if (relatedId != null && relatedId != identifier) {
+          if (!relatedBlankNodes.containsKey(relatedId)) {
+            relatedBlankNodes[relatedId] = computeFirstDegreeHash(relatedId);
           }
         }
       }
@@ -119,7 +121,7 @@ class BlankNodeHasher {
   /// Gets all quads that involve both the reference identifier and the related identifier,
   /// serialized for N-degree hashing.
   List<String> _getQuadsInvolvingRelatedNode(
-    List<Quad> quads,
+    Iterable<Quad> quads,
     String identifier,
     String relatedId,
     IdentifierIssuer branchIssuer,
