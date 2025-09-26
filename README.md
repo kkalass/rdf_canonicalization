@@ -1,6 +1,3 @@
-<div align="center">
-  <img src="https://kkalass.github.io/rdf_canonicalization/logo.svg" alt="rdf_canonicalization logo" width="96" height="96"/>
-</div>
 
 # RDF Canonicalization
 
