@@ -34,8 +34,11 @@ CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
     CanonicalizationOptions? options}) {
   options ??= const CanonicalizationOptions();
 
+  // Step 0: Deduplicate the dataset (RDF datasets should have set semantics)
+  final deduplicatedDataset = _deduplicateDataset(dataset);
+
   // Step 1: Create canonicalization state
-  final state = _createCanonicalizationState(dataset, inputLabels, options);
+  final state = _createCanonicalizationState(deduplicatedDataset, inputLabels, options);
 
   // Step 2: For every blank node identifier, compute first-degree hash
   final hasher = BlankNodeHasher(
@@ -118,7 +121,7 @@ CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
   }
 
   return CanonicalizedRdfDataset(
-    inputDataset: dataset,
+    inputDataset: deduplicatedDataset,
     inputIdentifiers: inputLabels,
     issuedIdentifiers: issuedIdentifiers,
   );
@@ -214,4 +217,13 @@ CanonicalizationState _createCanonicalizationState(
   }
 
   return state;
+}
+
+/// Deduplicate an RDF dataset to ensure set semantics (no duplicate quads)
+RdfDataset _deduplicateDataset(RdfDataset dataset) {
+  final uniqueQuads = <Quad>{};
+  for (final quad in dataset.quads) {
+    uniqueQuads.add(quad);
+  }
+  return RdfDataset.fromQuads(uniqueQuads.toList());
 }
