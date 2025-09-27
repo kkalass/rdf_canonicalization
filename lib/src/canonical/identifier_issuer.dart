@@ -1,14 +1,18 @@
+import 'package:rdf_canonicalization/src/canonical/canonical_util.dart'
+    show InputBlankNodeIdentifier, CanonicalBlankNodeIdentifier;
+
 class IdentifierIssuer {
   String identifierPrefix;
   int identifierCounter;
-  final Map<String, String> issuedIdentifiersMap;
+  final Map<InputBlankNodeIdentifier, CanonicalBlankNodeIdentifier>
+      issuedIdentifiersMap;
 
   IdentifierIssuer([String? identifierPrefix])
       : identifierPrefix = identifierPrefix ?? 'c14n',
         identifierCounter = 0,
-        issuedIdentifiersMap = <String, String>{};
+        issuedIdentifiersMap = <InputBlankNodeIdentifier, CanonicalBlankNodeIdentifier>{};
 
-  String issueIdentifier(String existingIdentifier) {
+  CanonicalBlankNodeIdentifier issueIdentifier(InputBlankNodeIdentifier existingIdentifier) {
     // Step 1: If there is a map entry for existing identifier in issued identifiers map, return it.
     if (issuedIdentifiersMap.containsKey(existingIdentifier)) {
       return issuedIdentifiersMap[existingIdentifier]!;

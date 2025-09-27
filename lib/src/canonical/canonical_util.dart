@@ -31,8 +31,11 @@ class CanonicalizedRdfDataset {
       required this.issuedIdentifiers});
 }
 
+typedef InputBlankNodeIdentifier = String;
+typedef CanonicalBlankNodeIdentifier = String;
+typedef HashString = String;
 CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
-    {Map<BlankNodeTerm, String>? inputLabels,
+    {Map<BlankNodeTerm, InputBlankNodeIdentifier>? inputLabels,
     CanonicalizationOptions? options}) {
   options ??= const CanonicalizationOptions();
 
@@ -52,9 +55,9 @@ CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
     options: options,
   );
 
-  final hashToBlankNodesMap = <String, List<String>>{};
+  final hashToBlankNodesMap = <HashString, List<InputBlankNodeIdentifier>>{};
   for (final identifier in blankNodeToQuadsMap.keys) {
-    final hash = hasher.computeFirstDegreeHash(identifier);
+    final HashString hash = hasher.computeFirstDegreeHash(identifier);
 
     // Add to hash-to-blank-nodes map
     hashToBlankNodesMap.putIfAbsent(hash, () => []).add(identifier);
@@ -62,7 +65,7 @@ CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
 
   // Step 3: Process hashes in lexicographical order
   final sortedHashes = hashToBlankNodesMap.keys.toList()..sort();
-  final nonUniqueHashes = <String>[];
+  final nonUniqueHashes = <HashString>[];
   final canonicalIssuer = IdentifierIssuer(options.blankNodePrefix);
   for (final hash in sortedHashes) {
     final identifiers = hashToBlankNodesMap[hash]!;
@@ -79,11 +82,12 @@ CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
   // Step 4: For every non-unique hash, use N-degree hashing and issue canonical identifiers
   final hashPathCalculator = HashPathCalculator(hasher);
 
-  for (final hash in nonUniqueHashes) {
-    final identifiers = hashToBlankNodesMap[hash]!;
+  for (final HashString hash in nonUniqueHashes) {
+    final List<InputBlankNodeIdentifier> identifiers =
+        hashToBlankNodesMap[hash]!;
 
     // Filter out already canonically labeled identifiers
-    final unlabeledIdentifiers = identifiers
+    final List<InputBlankNodeIdentifier> unlabeledIdentifiers = identifiers
         .where((id) => !canonicalIssuer.issuedIdentifiersMap.containsKey(id))
         .toList();
 
@@ -185,22 +189,26 @@ bool isIsomorphicGraphs(RdfGraph a, RdfGraph b,
 
 /// Helper function to create canonicalization state from dataset
 ({
-  Map<String, Set<Quad>> blankNodeToQuadsMap,
-  Map<BlankNodeTerm, String> blankNodeIdentifiers
-}) _createCanonicalizationState(Iterable<Quad> dataset,
-    Map<BlankNodeTerm, String>? inputLabels, CanonicalizationOptions options) {
+  Map<InputBlankNodeIdentifier, Set<Quad>> blankNodeToQuadsMap,
+  Map<BlankNodeTerm, InputBlankNodeIdentifier> blankNodeIdentifiers
+}) _createCanonicalizationState(
+    Iterable<Quad> dataset,
+    Map<BlankNodeTerm, InputBlankNodeIdentifier>? inputLabels,
+    CanonicalizationOptions options) {
   // Generate identifiers for blank nodes if not provided
-  final blankNodeIdentifiers = <BlankNodeTerm, String>{
+  final blankNodeIdentifiers = <BlankNodeTerm, InputBlankNodeIdentifier>{
     if (inputLabels != null) ...inputLabels
   };
-  final identifiers = <String>{if (inputLabels != null) ...inputLabels.values};
+  final identifiers = <InputBlankNodeIdentifier>{
+    if (inputLabels != null) ...inputLabels.values
+  };
 
-  final Map<String, Set<Quad>> blankNodeToQuadsMap = {};
+  final Map<InputBlankNodeIdentifier, Set<Quad>> blankNodeToQuadsMap = {};
   // Generate temporary identifiers and track the mentions of blank nodes
   var counter = 0;
   for (final quad in dataset) {
     for (final bnode in quad.blankNodes) {
-      String? identifier = blankNodeIdentifiers[bnode];
+      InputBlankNodeIdentifier? identifier = blankNodeIdentifiers[bnode];
       if (identifier == null) {
         // should not happen, but just in case, avoid collisions
         while (identifiers.contains(identifier = '_:n$counter')) {

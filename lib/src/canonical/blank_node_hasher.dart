@@ -12,8 +12,8 @@ import 'quad_extension.dart';
 /// Encapsulates the logic for both first-degree and N-degree hash computation
 /// as specified in the RDF Dataset Canonicalization specification.
 class BlankNodeHasher {
-  final Map<String, Set<Quad>> blankNodeToQuadsMap;
-  final Map<BlankNodeTerm, String> blankNodeIdentifiers;
+  final Map<InputBlankNodeIdentifier, Set<Quad>> blankNodeToQuadsMap;
+  final Map<BlankNodeTerm, InputBlankNodeIdentifier> blankNodeIdentifiers;
   final QuadSerializer quadSerializer;
   final CanonicalizationOptions options;
 
@@ -35,7 +35,7 @@ class BlankNodeHasher {
 
   /// Computes the first-degree hash for a blank node identifier.
   /// This hash is based only on the immediate quads that contain the blank node.
-  String computeFirstDegreeHash(String identifier) {
+  HashString computeFirstDegreeHash(InputBlankNodeIdentifier identifier) {
     final mentions = blankNodeToQuadsMap[identifier] ?? {};
     final nquads = mentions
         .map((quad) => quadSerializer.toFirstDegreeNQuad(quad, identifier))
@@ -48,7 +48,7 @@ class BlankNodeHasher {
     return _computeHash(nquads.join(''));
   }
 
-  String _computeHash(String input) {
+  HashString _computeHash(String input) {
     final bytes = utf8.encode(input);
     final digest = _getHashFunction().convert(bytes);
     return digest.toString();
@@ -57,7 +57,8 @@ class BlankNodeHasher {
   /// Computes the N-degree hash for a blank node identifier.
   /// This is used when first-degree hashes are not unique and considers
   /// the broader context of related blank nodes.
-  String computeNDegreeHash(String identifier, IdentifierIssuer issuer) {
+  HashString computeNDegreeHash(
+      InputBlankNodeIdentifier identifier, IdentifierIssuer issuer) {
     final nquads = <String>[];
 
     // Issue a temporary identifier for the reference node
@@ -92,10 +93,7 @@ class BlankNodeHasher {
     }
 
     // Create final hash
-    final concatenated = nquads.join('');
-    final bytes = utf8.encode(concatenated);
-    final digest = _getHashFunction().convert(bytes);
-    return digest.toString();
+    return _computeHash(nquads.join(''));
   }
 
   /// Finds all blank nodes that are related to the given identifier
@@ -131,13 +129,11 @@ class BlankNodeHasher {
     for (final quad in quads) {
       bool involvesRelated = false;
 
-      for (final term in [quad.subject, quad.object]) {
-        if (term is BlankNodeTerm) {
-          final termId = blankNodeIdentifiers[term];
-          if (termId == relatedId) {
-            involvesRelated = true;
-            break;
-          }
+      for (final term in quad.blankNodes) {
+        final termId = blankNodeIdentifiers[term];
+        if (termId == relatedId) {
+          involvesRelated = true;
+          break;
         }
       }
 
