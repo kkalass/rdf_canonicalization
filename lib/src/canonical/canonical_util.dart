@@ -2,7 +2,6 @@ import 'package:rdf_canonicalization/src/canonical/canonicalization_state.dart';
 import 'package:rdf_core/rdf_core.dart';
 
 import 'blank_node_hasher.dart';
-
 import 'identifier_issuer.dart';
 import 'quad_extension.dart';
 
@@ -35,39 +34,39 @@ class CanonicalizedRdfDataset {
 typedef InputBlankNodeIdentifier = String;
 typedef CanonicalBlankNodeIdentifier = String;
 typedef HashString = String;
+
+/// Implementation of https://www.w3.org/TR/rdf-canon/#canon-algo-algo
 CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
     {Map<BlankNodeTerm, InputBlankNodeIdentifier>? inputLabels,
     CanonicalizationOptions? options}) {
   options ??= const CanonicalizationOptions();
-
-  // Step 0: Deduplicate the dataset (RDF datasets should have set semantics)
-  final allQuads = _deduplicateQuads(dataset);
-
-  // Step 1: Create canonicalization state
-  final (
-    blankNodeToQuadsMap: blankNodeToQuadsMap,
-    blankNodeIdentifiers: blankNodeIdentifiers
-  ) = _createCanonicalizationState(allQuads, inputLabels, options);
-  final CanonicalizationState state = (
-    blankNodeIdentifiers: blankNodeIdentifiers,
-    blankNodeToQuadsMap: blankNodeToQuadsMap,
-    hashToBlankNodesMap: <HashString, List<InputBlankNodeIdentifier>>{},
-    blankNodeToFirstDegreeHash: <InputBlankNodeIdentifier, HashString>{},
-    canonicalIssuer: IdentifierIssuer(options.blankNodePrefix),
-  );
-  // Step 2: For every blank node identifier, compute first-degree hash
   final hasher = BlankNodeHasher(options: options);
 
-  for (final identifier in blankNodeToQuadsMap.keys) {
-    final HashString hash = hasher.computeFirstDegreeHash(state, identifier);
+  // Step 1: Create canonicalization state
+  final CanonicalizationState state = _createCanonicalizationState(dataset,
+      inputLabels: inputLabels, options: options);
+
+  // Step 2: Fill the blank node to quads map - the mentions of each blank node
+  for (final quad in state.quads) {
+    for (final bnode in quad.blankNodes) {
+      final identifier = state.blankNodeIdentifiers[bnode]!;
+
+      state.blankNodeToQuadsMap.putIfAbsent(identifier, () => {}).add(quad);
+    }
+  }
+
+  // Step 3: Create the First Degree Hashes for all blank nodes
+
+  for (final identifier in state.blankNodeToQuadsMap.keys) {
+    final HashString hash = hasher.hashFirstDegreeQuads(state, identifier);
 
     // Add to hash-to-blank-nodes map
     state.hashToBlankNodesMap.putIfAbsent(hash, () => []).add(identifier);
-    // Track first-degree hash for the blank node
+    // Track first-degree hash for the blank node for later (re)use
     state.blankNodeToFirstDegreeHash[identifier] = hash;
   }
 
-  // Step 3: Process hashes in lexicographical order
+  // Step 4: Process hashes in lexicographical order
   final sortedHashes = state.hashToBlankNodesMap.keys.toList()..sort();
   final nonUniqueHashes = <HashString>[];
 
@@ -82,35 +81,44 @@ CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
     }
   }
 
-  // Step 4: For every non-unique hash, use N-degree hashing and issue canonical identifiers
-  final nDegreeHashes = <HashString, List<InputBlankNodeIdentifier>>{};
-  for (final HashString hash in nonUniqueHashes) {
+  // Step 5: For every non-unique hash, use N-degree hashing
+  // just to be sure sort the non-unique hashes even though they should already be sorted
+  final sortedNonUniqueHashes = nonUniqueHashes.toList()..sort();
+  for (final HashString hash in sortedNonUniqueHashes) {
+    // Step 5.1: Create a list
+    final hashPathList = <HashNDegreeResult>[];
+
+    // Step 5.2: For each blank node identifier in identifier list
     final List<InputBlankNodeIdentifier> identifiers =
         state.hashToBlankNodesMap[hash]!;
-    // FIXME: stable order?
+    // Note: the identifiers here cannot be stable ordered, but that should not matter
+    // because each gets is own clean temporary issuer and we sort by hash later anyway
     for (final identifier in identifiers) {
+      if (state.canonicalIssuer.isIssued(identifier)) {
+        // already issued, skip
+        continue;
+      }
       // issuer for temporary blank node identifiers
-      IdentifierIssuer pathIdentifierIssuer = IdentifierIssuer('b');
-      pathIdentifierIssuer.issueIdentifier(identifier);
+      IdentifierIssuer temporaryIssuer = IdentifierIssuer('b');
+      temporaryIssuer.issueIdentifier(identifier);
 
       final (hash: hash, issuer: issuer) =
-          hasher.hashNDegreeQuads(state, identifier, pathIdentifierIssuer);
-      nDegreeHashes.putIfAbsent(hash, () => []).add(identifier);
+          hasher.hashNDegreeQuads(state, identifier, temporaryIssuer);
+      hashPathList.add((hash: hash, issuer: issuer));
     }
-  }
-  // Sort the n-degree hashes and issue canonical identifiers in that order
-  final sortedNDegreeHashes = nDegreeHashes.keys.toList()..sort();
-  for (final hash in sortedNDegreeHashes) {
-    final identifiers = nDegreeHashes[hash]!;
-    // FIXME: stable order?
-    for (final identifier in identifiers) {
-      state.canonicalIssuer.issueIdentifier(identifier);
+    // Step 5.3: Sort the list lexicographically by hash
+    hashPathList.sort((a, b) => a.hash.compareTo(b.hash));
+    for (final entry in hashPathList) {
+      final issuedIdentifiers = entry.issuer.inputIdentifiers;
+      for (final identifier in issuedIdentifiers) {
+        state.canonicalIssuer.issueIdentifier(identifier);
+      }
     }
   }
 
-  // Step 5: Build the result
+  // Step 6: Build the result
   final issuedIdentifiers = <BlankNodeTerm, String>{};
-  for (final entry in blankNodeIdentifiers.entries) {
+  for (final entry in state.blankNodeIdentifiers.entries) {
     final blankNode = entry.key;
     final originalIdentifier = entry.value;
     final canonicalIdentifier =
@@ -129,7 +137,8 @@ CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
     issuedIdentifiers: issuedIdentifiers,
     // Note that the correct ordering in the canonical dataset cannot be
     // created here because it depends on the nquad serialization.
-    canonicalDataset: RdfDataset.fromQuads(allQuads),
+    // The only difference to inputDataset is actually that duplicates are removed.
+    canonicalDataset: RdfDataset.fromQuads(state.quads),
   );
 }
 
@@ -183,10 +192,8 @@ bool isIsomorphicGraphs(RdfGraph a, RdfGraph b,
 }
 
 /// Helper function to create canonicalization state from dataset
-({
-  Map<InputBlankNodeIdentifier, Set<Quad>> blankNodeToQuadsMap,
-  Map<BlankNodeTerm, InputBlankNodeIdentifier> blankNodeIdentifiers
-}) _createCanonicalizationState(
+
+Map<BlankNodeTerm, InputBlankNodeIdentifier> _createBlankNodeIdentifiersMap(
     Iterable<Quad> dataset,
     Map<BlankNodeTerm, InputBlankNodeIdentifier>? inputLabels,
     CanonicalizationOptions options) {
@@ -198,7 +205,6 @@ bool isIsomorphicGraphs(RdfGraph a, RdfGraph b,
     if (inputLabels != null) ...inputLabels.values
   };
 
-  final Map<InputBlankNodeIdentifier, Set<Quad>> blankNodeToQuadsMap = {};
   // Generate temporary identifiers and track the mentions of blank nodes
   var counter = 0;
   for (final quad in dataset) {
@@ -212,14 +218,9 @@ bool isIsomorphicGraphs(RdfGraph a, RdfGraph b,
         identifiers.add(identifier);
         blankNodeIdentifiers[bnode] = identifier;
       }
-      blankNodeToQuadsMap.putIfAbsent(identifier, () => {}).add(quad);
     }
   }
-
-  return (
-    blankNodeIdentifiers: blankNodeIdentifiers,
-    blankNodeToQuadsMap: blankNodeToQuadsMap
-  );
+  return blankNodeIdentifiers;
 }
 
 /// Deduplicate an RDF dataset to ensure set semantics (no duplicate quads)
@@ -229,4 +230,20 @@ Set<Quad> _deduplicateQuads(RdfDataset dataset) {
     uniqueQuads.add(quad);
   }
   return uniqueQuads;
+}
+
+CanonicalizationState _createCanonicalizationState(RdfDataset dataset,
+    {Map<BlankNodeTerm, InputBlankNodeIdentifier>? inputLabels,
+    required CanonicalizationOptions options}) {
+  final allQuads = _deduplicateQuads(dataset);
+  final blankNodeIdentifiers =
+      _createBlankNodeIdentifiersMap(allQuads, inputLabels, options);
+  return (
+    quads: allQuads,
+    blankNodeIdentifiers: blankNodeIdentifiers,
+    blankNodeToQuadsMap: <InputBlankNodeIdentifier, Set<Quad>>{},
+    hashToBlankNodesMap: <HashString, List<InputBlankNodeIdentifier>>{},
+    blankNodeToFirstDegreeHash: <InputBlankNodeIdentifier, HashString>{},
+    canonicalIssuer: IdentifierIssuer(options.blankNodePrefix),
+  );
 }

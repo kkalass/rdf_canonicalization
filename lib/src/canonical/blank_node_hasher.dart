@@ -1,12 +1,16 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:logging/logging.dart';
 import 'package:rdf_canonicalization/src/canonical/canonicalization_state.dart';
 import 'package:rdf_core/rdf_core.dart';
 
 import 'canonical_util.dart';
 import 'identifier_issuer.dart';
 import 'quad_serializer.dart';
+
+final _log = Logger('rdf_canonicalization.blank_node_hasher');
+typedef HashNDegreeResult = ({HashString hash, IdentifierIssuer issuer});
 
 enum Position {
   subject('s'),
@@ -40,7 +44,9 @@ class BlankNodeHasher {
 
   /// Computes the first-degree hash for a blank node identifier.
   /// This hash is based only on the immediate quads that contain the blank node.
-  HashString computeFirstDegreeHash(
+  ///
+  /// Implements https://www.w3.org/TR/rdf-canon/#hash-1d-quads
+  HashString hashFirstDegreeQuads(
       CanonicalizationState state, InputBlankNodeIdentifier identifier) {
     final mentions = state.blankNodeToQuadsMap[identifier] ?? {};
     final nquads = mentions
@@ -90,7 +96,8 @@ class BlankNodeHasher {
     return _computeHash(input.toString());
   }
 
-  ({HashString hash, IdentifierIssuer issuer}) hashNDegreeQuads(
+  /// Implements https://www.w3.org/TR/rdf-canon/#hash-nd-quads
+  HashNDegreeResult hashNDegreeQuads(
       CanonicalizationState state,
       InputBlankNodeIdentifier identifier,
       IdentifierIssuer pathIdentifierIssuer) {
@@ -98,7 +105,12 @@ class BlankNodeHasher {
     final hn = <HashString, List<InputBlankNodeIdentifier>>{};
     for (final (relatedId: relatedId, hash: hash)
         in _createRelatedHashes(state, identifier, pathIdentifierIssuer)) {
-      hn.putIfAbsent(hash, () => []).add(relatedId);
+      final ids = hn.putIfAbsent(hash, () => []);
+      if (ids.contains(relatedId)) {
+        _log.warning('Skipping duplicate relatedId $relatedId for hash $hash');
+        continue; // skip duplicates
+      }
+      ids.add(relatedId);
     }
     final StringBuffer dataToHash = StringBuffer();
     final sortedRelatedHashes = hn.keys.toList()..sort();

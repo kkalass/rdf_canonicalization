@@ -5,11 +5,14 @@ import 'package:rdf_core/rdf_core.dart';
 import 'package:test/test.dart';
 import 'package:rdf_canonicalization/src/canonical/canonical_util.dart';
 
+import '../../test_util.dart';
+
 /// Official RDF Canonicalization Test Suite
 ///
 /// Tests based on the W3C RDF Dataset Canonicalization test suite
 /// https://github.com/w3c/rdf-canon/tree/main/tests
 void main() {
+  setupTestLogging();
   group('Official RDF Canonicalization Test Suite', () {
     final testData = _loadTestData();
 

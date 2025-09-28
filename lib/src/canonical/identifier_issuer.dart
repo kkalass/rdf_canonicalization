@@ -6,13 +6,18 @@ class IdentifierIssuer {
   int identifierCounter;
   final Map<InputBlankNodeIdentifier, CanonicalBlankNodeIdentifier>
       issuedIdentifiersMap;
+  // For convenience, keep a list of input identifiers for which we issued identifiers in order
+  final List<InputBlankNodeIdentifier> inputIdentifiers;
 
   IdentifierIssuer([String? identifierPrefix])
       : identifierPrefix = identifierPrefix ?? 'c14n',
         identifierCounter = 0,
-        issuedIdentifiersMap = <InputBlankNodeIdentifier, CanonicalBlankNodeIdentifier>{};
+        inputIdentifiers = [],
+        issuedIdentifiersMap =
+            <InputBlankNodeIdentifier, CanonicalBlankNodeIdentifier>{};
 
-  CanonicalBlankNodeIdentifier issueIdentifier(InputBlankNodeIdentifier existingIdentifier) {
+  CanonicalBlankNodeIdentifier issueIdentifier(
+      InputBlankNodeIdentifier existingIdentifier) {
     // Step 1: If there is a map entry for existing identifier in issued identifiers map, return it.
     if (issuedIdentifiersMap.containsKey(existingIdentifier)) {
       return issuedIdentifiersMap[existingIdentifier]!;
@@ -23,12 +28,17 @@ class IdentifierIssuer {
 
     // Step 3: Add an entry mapping existing identifier to issued identifier to the issued identifiers map.
     issuedIdentifiersMap[existingIdentifier] = issuedIdentifier;
+    inputIdentifiers.add(existingIdentifier);
 
     // Step 4: Increment identifier counter.
     identifierCounter++;
 
     // Step 5: Return issued identifier.
     return issuedIdentifier;
+  }
+
+  bool isIssued(InputBlankNodeIdentifier existingIdentifier) {
+    return issuedIdentifiersMap.containsKey(existingIdentifier);
   }
 
   IdentifierIssuer clone() {
