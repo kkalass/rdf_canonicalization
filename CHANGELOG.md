@@ -5,7 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - TBD
+
+## [0.2.0] - 2025-09-28
+
+### Fixed
+
+- **Test Suite Compliance**: Fixed critical bugs to achieve full compliance with the official W3C RDF canonicalization test suite
+- **Specification Alignment**: Re-implemented n-degree hashing algorithm to more closely align with the W3C specification
+- **Implementation Structure**: Improved canonicalization implementation with better quad handling and processing
+
+### Changed
+
+- **Code Quality**: Introduced typedefs to improve code readability and maintainability
+- **Test Infrastructure**: Added comprehensive official test suite for validation
+
+## [0.1.0] - 2025-09-26
 
 ### Added
 
