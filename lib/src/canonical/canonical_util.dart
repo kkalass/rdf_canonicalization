@@ -156,7 +156,7 @@ String toNQuads(CanonicalizedRdfDataset canonicalized,
     {CanonicalizationOptions? options}) {
   final NQuadsEncoder encoder =
       NQuadsEncoder(options: NQuadsEncoderOptions(canonical: true));
-  return encoder.encode(canonicalized.inputDataset,
+  return encoder.encode(canonicalized.canonicalDataset,
       blankNodeLabels: canonicalized.issuedIdentifiers,
       generateNewBlankNodeLabels: false);
 }

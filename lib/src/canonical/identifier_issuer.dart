@@ -45,6 +45,7 @@ class IdentifierIssuer {
     final cloned = IdentifierIssuer(identifierPrefix);
     cloned.identifierCounter = identifierCounter;
     cloned.issuedIdentifiersMap.addAll(issuedIdentifiersMap);
+    cloned.inputIdentifiers.addAll(inputIdentifiers);
     return cloned;
   }
 }
