@@ -1,7 +1,8 @@
+import 'package:rdf_canonicalization/src/canonical/canonicalization_state.dart';
 import 'package:rdf_core/rdf_core.dart';
 
 import 'blank_node_hasher.dart';
-import 'hash_path_calculator.dart';
+
 import 'identifier_issuer.dart';
 import 'quad_extension.dart';
 
@@ -47,32 +48,34 @@ CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
     blankNodeToQuadsMap: blankNodeToQuadsMap,
     blankNodeIdentifiers: blankNodeIdentifiers
   ) = _createCanonicalizationState(allQuads, inputLabels, options);
-
-  // Step 2: For every blank node identifier, compute first-degree hash
-  final hasher = BlankNodeHasher(
-    blankNodeToQuadsMap: blankNodeToQuadsMap,
+  final CanonicalizationState state = (
     blankNodeIdentifiers: blankNodeIdentifiers,
-    options: options,
+    blankNodeToQuadsMap: blankNodeToQuadsMap,
+    hashToBlankNodesMap: <HashString, List<InputBlankNodeIdentifier>>{},
+    blankNodeToFirstDegreeHash: <InputBlankNodeIdentifier, HashString>{},
+    canonicalIssuer: IdentifierIssuer(options.blankNodePrefix),
   );
+  // Step 2: For every blank node identifier, compute first-degree hash
+  final hasher = BlankNodeHasher(options: options);
 
-  final hashToBlankNodesMap = <HashString, List<InputBlankNodeIdentifier>>{};
   for (final identifier in blankNodeToQuadsMap.keys) {
-    final HashString hash = hasher.computeFirstDegreeHash(identifier);
+    final HashString hash = hasher.computeFirstDegreeHash(state, identifier);
 
     // Add to hash-to-blank-nodes map
-    hashToBlankNodesMap.putIfAbsent(hash, () => []).add(identifier);
+    state.hashToBlankNodesMap.putIfAbsent(hash, () => []).add(identifier);
+    // Track first-degree hash for the blank node
+    state.blankNodeToFirstDegreeHash[identifier] = hash;
   }
 
   // Step 3: Process hashes in lexicographical order
-  final sortedHashes = hashToBlankNodesMap.keys.toList()..sort();
+  final sortedHashes = state.hashToBlankNodesMap.keys.toList()..sort();
   final nonUniqueHashes = <HashString>[];
-  final canonicalIssuer = IdentifierIssuer(options.blankNodePrefix);
-  for (final hash in sortedHashes) {
-    final identifiers = hashToBlankNodesMap[hash]!;
 
+  for (final hash in sortedHashes) {
+    final identifiers = state.hashToBlankNodesMap[hash]!;
     if (identifiers.length == 1) {
       // Unique hash - issue canonical identifier immediately
-      canonicalIssuer.issueIdentifier(identifiers.first);
+      state.canonicalIssuer.issueIdentifier(identifiers.first);
     } else {
       // Non-unique hash - handle later
       nonUniqueHashes.add(hash);
@@ -80,40 +83,28 @@ CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
   }
 
   // Step 4: For every non-unique hash, use N-degree hashing and issue canonical identifiers
-  final hashPathCalculator = HashPathCalculator(hasher);
-
+  final nDegreeHashes = <HashString, List<InputBlankNodeIdentifier>>{};
   for (final HashString hash in nonUniqueHashes) {
     final List<InputBlankNodeIdentifier> identifiers =
-        hashToBlankNodesMap[hash]!;
+        state.hashToBlankNodesMap[hash]!;
+    // FIXME: stable order?
+    for (final identifier in identifiers) {
+      // issuer for temporary blank node identifiers
+      IdentifierIssuer pathIdentifierIssuer = IdentifierIssuer('b');
+      pathIdentifierIssuer.issueIdentifier(identifier);
 
-    // Filter out already canonically labeled identifiers
-    final List<InputBlankNodeIdentifier> unlabeledIdentifiers = identifiers
-        .where((id) => !canonicalIssuer.issuedIdentifiersMap.containsKey(id))
-        .toList();
-
-    if (unlabeledIdentifiers.isEmpty) continue;
-
-    // Create sorted hash paths for N-degree processing
-    final hashPathList = hashPathCalculator.createSortedHashPaths(
-      unlabeledIdentifiers,
-      canonicalIssuer,
-    );
-
-    // Issue canonical identifiers in sorted order
-    for (final hashPath in hashPathList) {
-      if (!canonicalIssuer.issuedIdentifiersMap
-          .containsKey(hashPath.identifier)) {
-        canonicalIssuer.issueIdentifier(hashPath.identifier);
-
-        // Merge any temporary identifiers issued during this process
-        for (final entry in hashPath.issuer.issuedIdentifiersMap.entries) {
-          final tempOriginal = entry.key;
-          if (tempOriginal != hashPath.identifier &&
-              !canonicalIssuer.issuedIdentifiersMap.containsKey(tempOriginal)) {
-            canonicalIssuer.issueIdentifier(tempOriginal);
-          }
-        }
-      }
+      final (hash: hash, issuer: issuer) =
+          hasher.hashNDegreeQuads(state, identifier, pathIdentifierIssuer);
+      nDegreeHashes.putIfAbsent(hash, () => []).add(identifier);
+    }
+  }
+  // Sort the n-degree hashes and issue canonical identifiers in that order
+  final sortedNDegreeHashes = nDegreeHashes.keys.toList()..sort();
+  for (final hash in sortedNDegreeHashes) {
+    final identifiers = nDegreeHashes[hash]!;
+    // FIXME: stable order?
+    for (final identifier in identifiers) {
+      state.canonicalIssuer.issueIdentifier(identifier);
     }
   }
 
@@ -123,9 +114,12 @@ CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
     final blankNode = entry.key;
     final originalIdentifier = entry.value;
     final canonicalIdentifier =
-        canonicalIssuer.issuedIdentifiersMap[originalIdentifier];
+        state.canonicalIssuer.issuedIdentifiersMap[originalIdentifier];
     if (canonicalIdentifier != null) {
       issuedIdentifiers[blankNode] = canonicalIdentifier;
+    } else {
+      throw StateError(
+          'No canonical identifier issued for blank node $blankNode with original identifier $originalIdentifier');
     }
   }
 
@@ -133,7 +127,8 @@ CanonicalizedRdfDataset toCanonicalizedRdfDataset(RdfDataset dataset,
     inputDataset: dataset,
     inputIdentifiers: inputLabels,
     issuedIdentifiers: issuedIdentifiers,
-    // TODO: convert deduplicatedDataset to List and sort by N-Quads canonical order?
+    // Note that the correct ordering in the canonical dataset cannot be
+    // created here because it depends on the nquad serialization.
     canonicalDataset: RdfDataset.fromQuads(allQuads),
   );
 }

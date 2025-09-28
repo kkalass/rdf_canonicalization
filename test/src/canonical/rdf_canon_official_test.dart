@@ -169,7 +169,7 @@ void _runIdentifierMapTest(TestCase testCase) {
     final canonicalId = entry.value;
 
     // Find the original input label for this blank node
-    final originalLabel = inputLabels != null ? inputLabels[blankNode] : null;
+    final originalLabel = inputLabels[blankNode];
     if (originalLabel != null) {
       // Remove the _: prefix from the original label to match expected format
       final cleanLabel = originalLabel.startsWith('_:')

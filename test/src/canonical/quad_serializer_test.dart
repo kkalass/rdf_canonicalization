@@ -1,3 +1,4 @@
+import 'package:rdf_canonicalization/src/canonical/canonical_util.dart';
 import 'package:rdf_core/rdf_core.dart';
 import 'package:test/test.dart';
 import 'package:rdf_canonicalization/src/canonical/quad_serializer.dart';
@@ -8,17 +9,17 @@ void main() {
     late BlankNodeTerm blankNode1;
     late BlankNodeTerm blankNode2;
     late BlankNodeTerm blankNode3;
-
+    late Map<BlankNodeTerm, InputBlankNodeIdentifier> blankNodeIdentifiers;
     setUp(() {
       blankNode1 = BlankNodeTerm();
       blankNode2 = BlankNodeTerm();
       blankNode3 = BlankNodeTerm();
-
-      serializer = QuadSerializer({
+      blankNodeIdentifiers = {
         blankNode1: 'id1',
         blankNode2: 'id2',
         blankNode3: 'id3',
-      });
+      };
+      serializer = QuadSerializer();
     });
 
     test('should serialize quad with reference blank node as subject', () {
@@ -28,7 +29,8 @@ void main() {
         const IriTerm('http://example.org/object'),
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id1');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id1');
 
       expect(
           result,
@@ -43,7 +45,8 @@ void main() {
         blankNode1,
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id1');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id1');
 
       expect(
           result,
@@ -58,7 +61,8 @@ void main() {
         blankNode2,
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id1');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id1');
 
       expect(result, equals('_:a <http://example.org/predicate> _:z .\n'));
     });
@@ -71,7 +75,8 @@ void main() {
         unknownBlankNode,
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id1');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id1');
 
       expect(result, equals('_:a <http://example.org/predicate> _:z .\n'));
     });
@@ -84,7 +89,8 @@ void main() {
         blankNode1,
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id1');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id1');
 
       expect(
           result,
@@ -100,7 +106,8 @@ void main() {
         blankNode2,
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id1');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id1');
 
       expect(
           result,
@@ -115,7 +122,8 @@ void main() {
         const IriTerm('http://example.org/object'),
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id1');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id1');
 
       expect(
           result,
@@ -130,7 +138,8 @@ void main() {
         LiteralTerm.string('Alice'),
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id1');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id1');
 
       expect(result, equals('_:a <http://example.org/name> "Alice" .\n'));
     });
@@ -142,7 +151,8 @@ void main() {
         LiteralTerm.integer(30),
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id1');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id1');
 
       expect(
           result,
@@ -157,7 +167,8 @@ void main() {
         LiteralTerm('Hello', language: 'en'),
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id1');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id1');
 
       expect(result, equals('_:a <http://example.org/label> "Hello"@en .\n'));
     });
@@ -169,7 +180,8 @@ void main() {
         LiteralTerm.string('Line 1\nLine 2\r"Quote"\\ Backslash'),
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id1');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id1');
 
       expect(
           result,
@@ -184,7 +196,8 @@ void main() {
         blankNode3,
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id2');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id2');
 
       expect(result, equals('_:z <http://example.org/predicate> _:z .\n'));
     });
@@ -196,7 +209,8 @@ void main() {
         const IriTerm('http://example.org/object'),
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id1');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id1');
 
       expect(
           result,
@@ -211,7 +225,8 @@ void main() {
         blankNode3,
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id1');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id1');
 
       expect(result, equals('_:z <http://example.org/predicate> _:z .\n'));
     });
@@ -226,7 +241,8 @@ void main() {
         blankNode3,
       );
 
-      final result = serializer.toFirstDegreeNQuad(quad, 'id1');
+      final result =
+          serializer.toFirstDegreeNQuad(blankNodeIdentifiers, quad, 'id1');
 
       expect(result, equals('_:a <http://example.org/knows> _:z _:z .\n'));
     });
